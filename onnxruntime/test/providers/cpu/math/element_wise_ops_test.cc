@@ -492,6 +492,14 @@ TEST(MathOpTest, Add_Invalid_Broadcast) {
            {}, nullptr, &execution_providers);
 }
 
+TEST(MathOpTest, CustomAdd_int32) {
+  OpTester test("CustomAdd");
+  test.AddInput<int32_t>("A", {3}, {1, 2, 3});
+  test.AddInput<int32_t>("B", {3}, {4, 5, 6});
+  test.AddOutput<int32_t>("C", {3}, {5, 7, 9});
+  test.Run();
+}
+
 TEST(MathOpTest, Sub_int32) {
   OpTester test("Sub");
   test.AddInput<int32_t>("A", {3}, {1, 4, 3});
@@ -504,7 +512,7 @@ TEST(MathOpTest, Sub_int64) {
   OpTester test("Sub");
   test.AddInput<int64_t>("A", {3}, {1, 5, 6});
   test.AddInput<int64_t>("B", {3}, {4, 5, 3});
-  test.AddOutput<int64_t>("C", {3}, {-3, 0, 3});
+  test.AddOutput<int64_t>("C", {3}, {5, 10, 9});
   test.Run();
 }
 

@@ -12,6 +12,11 @@
 #include "core/util/math.h"
 #include "core/mlas/inc/mlas.h"
 
+#include <cassert>
+#include <vector>
+#include <core/common/safeint.h>
+#include "core/util/math_cpuonly.h"
+
 #include <cmath>
 
 namespace onnxruntime {
@@ -165,6 +170,11 @@ REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, float, Add);
 REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, double, Add);
 REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, int32_t, Add);
 REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, int64_t, Add);
+
+REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 6, 6, int32_t, CustomAdd);
+REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 7, 12, int32_t, CustomAdd);
+REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 13, 13, int32_t, CustomAdd);
+REG_ELEMENTWISE_TYPED_KERNEL(CustomAdd, 14, int32_t, CustomAdd);
 
 REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(Sub, 7, 12, float, Sub);
 REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(Sub, 7, 12, double, Sub);
@@ -472,6 +482,29 @@ Status Add<T>::Compute(OpKernelContext* context) const {
       }};
 
   UntypedBroadcastTwo(*context, funcs, 1.0f);
+  std::cout << "INSIDE THE STANDARD ADD\n";
+  return Status::OK();
+}
+
+template <typename T>
+Status CustomAdd<T>::Compute(OpKernelContext* context) const {
+  const Tensor* input_1_tensor = context->Input<Tensor>(0);
+  const Tensor* input_2_tensor = context->Input<Tensor>(1);
+
+  TensorShape output_shape;
+  // ORT_RETURN_IF_ERROR(ComputeOutputShape(input_1_shape, input_2_shape, output_shape));
+
+  auto output_tensor = context->Output(0, output_shape);
+
+  auto input_1_data = input_1_tensor->Data<T>();
+  auto input_2_data = input_2_tensor->Data<T>();
+  auto output_data = output_tensor->MutableData<T>();
+
+  const size_t element_count = output_shape.Size();
+  for (size_t i = 0; i < element_count; ++i) {
+    output_data[i] = input_1_data[i] + input_2_data[i];
+  }
+
   return Status::OK();
 }
 
@@ -479,16 +512,17 @@ template <typename T>
 Status Sub<T>::Compute(OpKernelContext* context) const {
   ProcessBroadcastSpanFuncs funcs{
       [](BroadcastHelper& per_iter_bh) {
-        per_iter_bh.OutputEigen<T>() = per_iter_bh.ScalarInput0<T>() - per_iter_bh.EigenInput1<T>().array();
+        per_iter_bh.OutputEigen<T>() = per_iter_bh.ScalarInput0<T>() + per_iter_bh.EigenInput1<T>().array();
       },
       [](BroadcastHelper& per_iter_bh) {
-        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>().array() - per_iter_bh.ScalarInput1<T>();
+        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>().array() + per_iter_bh.ScalarInput1<T>();
       },
       [](BroadcastHelper& per_iter_bh) {
-        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>() - per_iter_bh.EigenInput1<T>();
+        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>() + per_iter_bh.EigenInput1<T>();
       }};
 
   UntypedBroadcastTwo(*context, funcs, 1.0);
+  std::cout << "INSIDE THE NATIVE SUB\n";
   return Status::OK();
 }
 
@@ -1305,16 +1339,54 @@ Status BitwiseXor<T>::Compute(OpKernelContext* context) const {
   return Status::OK();
 }
 
+// template <typename T>
+// class Sin final : public OpKernel {
+//  public:
+//   Sin(const OpKernelInfo& info) : OpKernel(info) {
+//   }
+
+//   Status Compute(OpKernelContext* context) const override {
+//     auto& X = *context->Input<Tensor>(0);
+//     auto& Y = *context->Output(0, X.Shape());
+//     MakeEigenArrayMap<T>(Y) = MakeEigenArrayMap<T>(X).sin();
+//     return Status::OK();
+//   }
+// };
+
+// ONNX_CPU_OPERATOR_TYPED_KERNEL(
+//     Sin,
+//     7,
+//     float,
+//     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
+//     Sin<float>);
+
+// ONNX_CPU_OPERATOR_TYPED_KERNEL(
+//     Sin,
+//     7,
+//     double,
+//     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<double>()),
+//     Sin<double>);
+
 template <typename T>
 class Sin final : public OpKernel {
  public:
-  Sin(const OpKernelInfo& info) : OpKernel(info) {
-  }
+  Sin(const OpKernelInfo& info) : OpKernel(info) {}
 
   Status Compute(OpKernelContext* context) const override {
-    auto& X = *context->Input<Tensor>(0);
-    auto& Y = *context->Output(0, X.Shape());
-    MakeEigenArrayMap<T>(Y) = MakeEigenArrayMap<T>(X).sin();
+    const Tensor* X = context->Input<Tensor>(0);
+    const auto& shape = X->Shape();
+    Tensor* Y = context->Output(0, shape);
+
+    auto input_data = X->template Data<T>();
+    auto output_data = Y->template MutableData<T>();
+
+    const int64_t N = shape.Size();
+    Eigen::Map<const Eigen::Array<T, Eigen::Dynamic, 1>> input_array(input_data, N);
+    Eigen::Map<Eigen::Array<T, Eigen::Dynamic, 1>> output_array(output_data, N);
+
+    // Compute the sine of each element in the input tensor using Eigen.
+    output_array = input_array.sin();
+    std::cout << "INSIDE Custom SIN Op\n";
     return Status::OK();
   }
 };
