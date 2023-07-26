@@ -222,6 +222,15 @@ class Add final : public OpKernel {
 };
 
 template <typename T>
+class CustomAdd final : public OpKernel {
+ public:
+  CustomAdd(const OpKernelInfo& info) : OpKernel(info) {
+  }
+
+  Status Compute(OpKernelContext* context) const override;
+};
+
+template <typename T>
 class Sub final : public OpKernel {
  public:
   Sub(const OpKernelInfo& info) : OpKernel(info) {

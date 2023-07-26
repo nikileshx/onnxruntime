@@ -1,0 +1,875 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index fd28e2d7b3..7c66b77f31 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -39,5 +39,79 @@
+     "cpplint.filters": [
+         "-build/include_subdir",
+         "-runtime/references"
+-    ]
++    ],
++    "files.associations": {
++        "iostream": "cpp",
++        "pointers": "cpp",
++        "any": "cpp",
++        "array": "cpp",
++        "atomic": "cpp",
++        "bit": "cpp",
++        "*.tcc": "cpp",
++        "bitset": "cpp",
++        "cctype": "cpp",
++        "chrono": "cpp",
++        "cinttypes": "cpp",
++        "clocale": "cpp",
++        "cmath": "cpp",
++        "codecvt": "cpp",
++        "complex": "cpp",
++        "condition_variable": "cpp",
++        "cstdarg": "cpp",
++        "cstddef": "cpp",
++        "cstdint": "cpp",
++        "cstdio": "cpp",
++        "cstdlib": "cpp",
++        "cstring": "cpp",
++        "ctime": "cpp",
++        "cwchar": "cpp",
++        "cwctype": "cpp",
++        "deque": "cpp",
++        "forward_list": "cpp",
++        "list": "cpp",
++        "map": "cpp",
++        "set": "cpp",
++        "unordered_map": "cpp",
++        "unordered_set": "cpp",
++        "vector": "cpp",
++        "exception": "cpp",
++        "algorithm": "cpp",
++        "functional": "cpp",
++        "iterator": "cpp",
++        "memory": "cpp",
++        "memory_resource": "cpp",
++        "numeric": "cpp",
++        "optional": "cpp",
++        "random": "cpp",
++        "ratio": "cpp",
++        "string": "cpp",
++        "string_view": "cpp",
++        "system_error": "cpp",
++        "tuple": "cpp",
++        "type_traits": "cpp",
++        "utility": "cpp",
++        "fstream": "cpp",
++        "initializer_list": "cpp",
++        "iomanip": "cpp",
++        "iosfwd": "cpp",
++        "istream": "cpp",
++        "limits": "cpp",
++        "mutex": "cpp",
++        "new": "cpp",
++        "ostream": "cpp",
++        "sstream": "cpp",
++        "stdexcept": "cpp",
++        "streambuf": "cpp",
++        "thread": "cpp",
++        "typeinfo": "cpp",
++        "valarray": "cpp",
++        "variant": "cpp",
++        "string_span": "cpp",
++        "future": "cpp",
++        "span": "cpp",
++        "*.inc": "cpp",
++        "narrow": "cpp",
++        "byte": "cpp",
++        "typeindex": "cpp"
++    }
+ }
+diff --git a/cmake/onnxruntime_unittests.cmake b/cmake/onnxruntime_unittests.cmake
+index d972fc5458..817f809e54 100644
+--- a/cmake/onnxruntime_unittests.cmake
++++ b/cmake/onnxruntime_unittests.cmake
+@@ -1396,16 +1396,25 @@ if (NOT onnxruntime_BUILD_WEBASSEMBLY)
+   if (onnxruntime_USE_CUDA)
+     onnxruntime_add_shared_library(custom_op_library ${ONNXRUNTIME_SHARED_LIB_TEST_SRC_DIR}/cuda_ops.cu
+                                                      ${TEST_SRC_DIR}/testdata/custom_op_library/custom_op_library.cc)
++    onnxruntime_add_shared_library(mycustom_op_library ${ONNXRUNTIME_SHARED_LIB_TEST_SRC_DIR}/cuda_ops.cu
++                                                       ${TEST_SRC_DIR}/testdata/mycustom_op_library/spconv_ops.cc)
+     target_include_directories(custom_op_library PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+     if (HAS_QSPECTRE)
+       target_compile_options(custom_op_library PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:SHELL:-Xcompiler /Qspectre>")
+     endif()
+   else()
+     onnxruntime_add_shared_library(custom_op_library ${TEST_SRC_DIR}/testdata/custom_op_library/custom_op_library.cc)
+-  endif()
++    onnxruntime_add_shared_library(mycustom_op_library ${TEST_SRC_DIR}/testdata/mycustom_op_library/spconv_ops.cc)
++    target_compile_options(mycustom_op_library PRIVATE "-Wno-unused-variable -Wno-unused-function -Wno-error")
++    endif()
+ 
+   target_include_directories(custom_op_library PRIVATE ${REPO_ROOT}/include)
++  # target_include_directories(my_custom_op_library PRIVATE /home/mcw/onnxruntime/cmake/external/onnx)
++  # target_include_directories(my_custom_op_library PRIVATE ${REPO_ROOT}/include/onnxruntime/core)
+   target_link_libraries(custom_op_library PRIVATE ${GSL_TARGET})
++  target_link_libraries(mycustom_op_library PRIVATE ${GSL_TARGET})
++  add_dependencies(mycustom_op_library onnx ${onnxruntime_EXTERNAL_DEPENDENCIES})
++  onnxruntime_add_include_to_target(mycustom_op_library onnxruntime_common onnxruntime_framework onnx onnx_proto ${PROTOBUF_LIB} flatbuffers::flatbuffers Boost::mp11)
+ 
+   if(UNIX)
+     if (APPLE)
+@@ -1415,6 +1424,7 @@ if (NOT onnxruntime_BUILD_WEBASSEMBLY)
+     endif()
+   else()
+     set(ONNXRUNTIME_CUSTOM_OP_LIB_LINK_FLAG "-DEF:${TEST_SRC_DIR}/testdata/custom_op_library/custom_op_library.def")
++    set(ONNXRUNTIME_CUSTOM_OP_LIB_LINK_FLAG "-DEF:${TEST_SRC_DIR}/testdata/mycustom_op_library/my_custom_op_library.def")
+     if (NOT onnxruntime_USE_CUDA)
+       target_compile_options(custom_op_library PRIVATE "$<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler /wd26409>"
+                     "$<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:/wd26409>")
+diff --git a/include/onnxruntime/core/session/onnxruntime_c_api.h b/include/onnxruntime/core/session/onnxruntime_c_api.h
+index 7ce75d4622..2b9c5b4a0e 100644
+--- a/include/onnxruntime/core/session/onnxruntime_c_api.h
++++ b/include/onnxruntime/core/session/onnxruntime_c_api.h
+@@ -30,7 +30,7 @@
+  *
+  * This value is used by some API functions to behave as this version of the header expects.
+  */
+-#define ORT_API_VERSION 15
++#define ORT_API_VERSION 11
+ 
+ #ifdef __cplusplus
+ extern "C" {
+diff --git a/onnxruntime/core/providers/cpu/cpu_execution_provider.cc b/onnxruntime/core/providers/cpu/cpu_execution_provider.cc
+index 8af6b9cb30..9809d120de 100644
+--- a/onnxruntime/core/providers/cpu/cpu_execution_provider.cc
++++ b/onnxruntime/core/providers/cpu/cpu_execution_provider.cc
+@@ -104,6 +104,7 @@ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOn
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, double, Add);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int32_t, Add);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int64_t, Add);
++class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int32_t, CustomAdd);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, float, Sub);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, double, Sub);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int32_t, Sub);
+@@ -291,8 +292,8 @@ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOn
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, int64_t, Less);
+ class ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, EyeLike);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, float, IsNaN);
+-class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, double, IsNaN);
+-class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, MLFloat16, IsNaN);
++// class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, double, IsNaN);
++// class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, MLFloat16, IsNaN);
+ class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, Sign);
+ class ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, Shrink);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12, float, Erf);
+@@ -612,6 +613,8 @@ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOn
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, double, Add);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, int32_t, Add);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, int64_t, Add);
++class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 6, 6, int32_t, CustomAdd);
++class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, int32_t, CustomAdd);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, float, Sub);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, double, Sub);
+ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, int32_t, Sub);
+@@ -673,8 +676,8 @@ class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDoma
+ class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 15, ScatterElements);
+ class ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, Identity);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, float, IsNaN);
+-class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, double, IsNaN);
+-class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, MLFloat16, IsNaN);
++// class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, double, IsNaN);
++// class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, MLFloat16, IsNaN);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, bool, NonZero);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, float, NonZero);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, int32_t, NonZero);
+@@ -747,6 +750,7 @@ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain,
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, double, Add);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int32_t, Add);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int64_t, Add);
++class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int32_t, CustomAdd);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, float, Sub);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, double, Sub);
+ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int32_t, Sub);
+@@ -968,6 +972,8 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+                                                                           Add)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int64_t,
+                                                                           Add)>,
++    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int32_t,
++                                                                          CustomAdd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, float, Sub)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, double, Sub)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 7, 12, int32_t,
+@@ -1295,10 +1301,10 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, EyeLike)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
+                                                                           float, IsNaN)>,
+-    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
+-                                                                          double, IsNaN)>,
+-    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
+-                                                                          MLFloat16, IsNaN)>,
++    // BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
++    //                                                                       double, IsNaN)>,
++    // BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
++    //                                                                       MLFloat16, IsNaN)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, 12,
+                                                                     Sign)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 9, Shrink)>,
+@@ -1835,6 +1841,10 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+                                                                           int32_t, Add)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13,
+                                                                           int64_t, Add)>,
++    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 6, 6,
++                                                                          int32_t, CustomAdd)>,
++    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13,
++                                                                          int32_t, CustomAdd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13,
+                                                                           float, Sub)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13,
+@@ -1924,10 +1934,10 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 13, Identity)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, float,
+                                                                 IsNaN)>,
+-    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, double,
+-                                                                IsNaN)>,
+-    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, MLFloat16,
+-                                                                IsNaN)>,
++    // BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, double,
++    //                                                             IsNaN)>,
++    // BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, MLFloat16,
++    //                                                             IsNaN)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, bool,
+                                                                 NonZero)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, float,
+@@ -1941,75 +1951,75 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, GatherND)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, Pad)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceL1)>,
++                                                                          ReduceL1)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceL1)>,
++                                                                          ReduceL1)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceL1)>,
++                                                                          ReduceL1)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceL2)>,
++                                                                          ReduceL2)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceL2)>,
++                                                                          ReduceL2)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceL2)>,
++                                                                          ReduceL2)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceLogSum)>,
++                                                                          ReduceLogSum)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceLogSum)>,
++                                                                          ReduceLogSum)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceLogSum)>,
++                                                                          ReduceLogSum)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceLogSumExp)>,
++                                                                          ReduceLogSumExp)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, double,
+-                                                                ReduceLogSumExp)>,
++                                                                          ReduceLogSumExp)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceLogSumExp)>,
++                                                                          ReduceLogSumExp)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceLogSumExp)>,
++                                                                          ReduceLogSumExp)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, double,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int8_t,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, uint8_t,
+-                                                                ReduceMax)>,
++                                                                          ReduceMax)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceMean)>,
++                                                                          ReduceMean)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, double,
+-                                                                ReduceMean)>,
++                                                                          ReduceMean)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceMean)>,
++                                                                          ReduceMean)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, double,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int8_t,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, uint8_t,
+-                                                                ReduceMin)>,
++                                                                          ReduceMin)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceProd)>,
++                                                                          ReduceProd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceProd)>,
++                                                                          ReduceProd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceProd)>,
++                                                                          ReduceProd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, float,
+-                                                                ReduceSumSquare)>,
++                                                                          ReduceSumSquare)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int32_t,
+-                                                                ReduceSumSquare)>,
++                                                                          ReduceSumSquare)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, double,
+-                                                                ReduceSumSquare)>,
++                                                                          ReduceSumSquare)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17, int64_t,
+-                                                                ReduceSumSquare)>,
++                                                                          ReduceSumSquare)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, float,
+                                                                 ReduceSum)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, int32_t,
+@@ -2019,13 +2029,13 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, int64_t,
+                                                                 ReduceSum)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17,
+-                                                                float, Resize)>,
++                                                                          float, Resize)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17,
+-                                                                int32_t, Resize)>,
++                                                                          int32_t, Resize)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17,
+-                                                                int8_t, Resize)>,
++                                                                          int8_t, Resize)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 17,
+-                                                                uint8_t, Resize)>,
++                                                                          uint8_t, Resize)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 15, Loop)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, 15, If)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 13, Hardmax)>,
+@@ -2062,6 +2072,8 @@ Status RegisterOnnxOperatorKernels(KernelRegistry& kernel_registry) {
+                                                                 Add)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int64_t,
+                                                                 Add)>,
++    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int32_t,
++                                                                CustomAdd)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, float, Sub)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, double, Sub)>,
+     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kCpuExecutionProvider, kOnnxDomain, 14, int32_t,
+diff --git a/onnxruntime/core/providers/cpu/math/element_wise_ops.cc b/onnxruntime/core/providers/cpu/math/element_wise_ops.cc
+index d5220d991d..114f2a0e04 100644
+--- a/onnxruntime/core/providers/cpu/math/element_wise_ops.cc
++++ b/onnxruntime/core/providers/cpu/math/element_wise_ops.cc
+@@ -12,6 +12,11 @@
+ #include "core/util/math.h"
+ #include "core/mlas/inc/mlas.h"
+ 
++#include <cassert>
++#include <vector>
++#include <core/common/safeint.h>
++#include "core/util/math_cpuonly.h"
++
+ #include <cmath>
+ 
+ namespace onnxruntime {
+@@ -166,6 +171,11 @@ REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, double, Add);
+ REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, int32_t, Add);
+ REG_ELEMENTWISE_TYPED_KERNEL(Add, 14, int64_t, Add);
+ 
++REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 6, 6, int32_t, CustomAdd);
++REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 7, 12, int32_t, CustomAdd);
++REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(CustomAdd, 13, 13, int32_t, CustomAdd);
++REG_ELEMENTWISE_TYPED_KERNEL(CustomAdd, 14, int32_t, CustomAdd);
++
+ REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(Sub, 7, 12, float, Sub);
+ REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(Sub, 7, 12, double, Sub);
+ REG_ELEMENTWISE_VERSIONED_TYPED_KERNEL(Sub, 7, 12, int32_t, Sub);
+@@ -472,6 +482,29 @@ Status Add<T>::Compute(OpKernelContext* context) const {
+       }};
+ 
+   UntypedBroadcastTwo(*context, funcs, 1.0f);
++  std::cout << "INSIDE THE STANDARD ADD\n";
++  return Status::OK();
++}
++
++template <typename T>
++Status CustomAdd<T>::Compute(OpKernelContext* context) const {
++  const Tensor* input_1_tensor = context->Input<Tensor>(0);
++  const Tensor* input_2_tensor = context->Input<Tensor>(1);
++
++  TensorShape output_shape;
++  // ORT_RETURN_IF_ERROR(ComputeOutputShape(input_1_shape, input_2_shape, output_shape));
++
++  auto output_tensor = context->Output(0, output_shape);
++
++  auto input_1_data = input_1_tensor->Data<T>();
++  auto input_2_data = input_2_tensor->Data<T>();
++  auto output_data = output_tensor->MutableData<T>();
++
++  const size_t element_count = output_shape.Size();
++  for (size_t i = 0; i < element_count; ++i) {
++    output_data[i] = input_1_data[i] + input_2_data[i];
++  }
++
+   return Status::OK();
+ }
+ 
+@@ -479,16 +512,17 @@ template <typename T>
+ Status Sub<T>::Compute(OpKernelContext* context) const {
+   ProcessBroadcastSpanFuncs funcs{
+       [](BroadcastHelper& per_iter_bh) {
+-        per_iter_bh.OutputEigen<T>() = per_iter_bh.ScalarInput0<T>() - per_iter_bh.EigenInput1<T>().array();
++        per_iter_bh.OutputEigen<T>() = per_iter_bh.ScalarInput0<T>() + per_iter_bh.EigenInput1<T>().array();
+       },
+       [](BroadcastHelper& per_iter_bh) {
+-        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>().array() - per_iter_bh.ScalarInput1<T>();
++        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>().array() + per_iter_bh.ScalarInput1<T>();
+       },
+       [](BroadcastHelper& per_iter_bh) {
+-        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>() - per_iter_bh.EigenInput1<T>();
++        per_iter_bh.OutputEigen<T>() = per_iter_bh.EigenInput0<T>() + per_iter_bh.EigenInput1<T>();
+       }};
+ 
+   UntypedBroadcastTwo(*context, funcs, 1.0);
++  std::cout << "INSIDE THE NATIVE SUB\n";
+   return Status::OK();
+ }
+ 
+@@ -1305,16 +1339,54 @@ Status BitwiseXor<T>::Compute(OpKernelContext* context) const {
+   return Status::OK();
+ }
+ 
++// template <typename T>
++// class Sin final : public OpKernel {
++//  public:
++//   Sin(const OpKernelInfo& info) : OpKernel(info) {
++//   }
++
++//   Status Compute(OpKernelContext* context) const override {
++//     auto& X = *context->Input<Tensor>(0);
++//     auto& Y = *context->Output(0, X.Shape());
++//     MakeEigenArrayMap<T>(Y) = MakeEigenArrayMap<T>(X).sin();
++//     return Status::OK();
++//   }
++// };
++
++// ONNX_CPU_OPERATOR_TYPED_KERNEL(
++//     Sin,
++//     7,
++//     float,
++//     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
++//     Sin<float>);
++
++// ONNX_CPU_OPERATOR_TYPED_KERNEL(
++//     Sin,
++//     7,
++//     double,
++//     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<double>()),
++//     Sin<double>);
++
+ template <typename T>
+ class Sin final : public OpKernel {
+  public:
+-  Sin(const OpKernelInfo& info) : OpKernel(info) {
+-  }
++  Sin(const OpKernelInfo& info) : OpKernel(info) {}
+ 
+   Status Compute(OpKernelContext* context) const override {
+-    auto& X = *context->Input<Tensor>(0);
+-    auto& Y = *context->Output(0, X.Shape());
+-    MakeEigenArrayMap<T>(Y) = MakeEigenArrayMap<T>(X).sin();
++    const Tensor* X = context->Input<Tensor>(0);
++    const auto& shape = X->Shape();
++    Tensor* Y = context->Output(0, shape);
++
++    auto input_data = X->template Data<T>();
++    auto output_data = Y->template MutableData<T>();
++
++    const int64_t N = shape.Size();
++    Eigen::Map<const Eigen::Array<T, Eigen::Dynamic, 1>> input_array(input_data, N);
++    Eigen::Map<Eigen::Array<T, Eigen::Dynamic, 1>> output_array(output_data, N);
++
++    // Compute the sine of each element in the input tensor using Eigen.
++    output_array = input_array.sin();
++    std::cout << "INSIDE Custom SIN Op\n";
+     return Status::OK();
+   }
+ };
+diff --git a/onnxruntime/core/providers/cpu/math/element_wise_ops.h b/onnxruntime/core/providers/cpu/math/element_wise_ops.h
+index 6b0254ff53..18374d5307 100644
+--- a/onnxruntime/core/providers/cpu/math/element_wise_ops.h
++++ b/onnxruntime/core/providers/cpu/math/element_wise_ops.h
+@@ -221,6 +221,15 @@ class Add final : public OpKernel {
+   Status Compute(OpKernelContext* context) const override;
+ };
+ 
++template <typename T>
++class CustomAdd final : public OpKernel {
++ public:
++  CustomAdd(const OpKernelInfo& info) : OpKernel(info) {
++  }
++
++  Status Compute(OpKernelContext* context) const override;
++};
++
+ template <typename T>
+ class Sub final : public OpKernel {
+  public:
+diff --git a/onnxruntime/test/providers/cpu/math/element_wise_ops_test.cc b/onnxruntime/test/providers/cpu/math/element_wise_ops_test.cc
+index 792eef6b95..7d5c4cf71a 100644
+--- a/onnxruntime/test/providers/cpu/math/element_wise_ops_test.cc
++++ b/onnxruntime/test/providers/cpu/math/element_wise_ops_test.cc
+@@ -492,6 +492,14 @@ TEST(MathOpTest, Add_Invalid_Broadcast) {
+            {}, nullptr, &execution_providers);
+ }
+ 
++TEST(MathOpTest, CustomAdd_int32) {
++  OpTester test("CustomAdd");
++  test.AddInput<int32_t>("A", {3}, {1, 2, 3});
++  test.AddInput<int32_t>("B", {3}, {4, 5, 6});
++  test.AddOutput<int32_t>("C", {3}, {5, 7, 9});
++  test.Run();
++}
++
+ TEST(MathOpTest, Sub_int32) {
+   OpTester test("Sub");
+   test.AddInput<int32_t>("A", {3}, {1, 4, 3});
+@@ -504,7 +512,7 @@ TEST(MathOpTest, Sub_int64) {
+   OpTester test("Sub");
+   test.AddInput<int64_t>("A", {3}, {1, 5, 6});
+   test.AddInput<int64_t>("B", {3}, {4, 5, 3});
+-  test.AddOutput<int64_t>("C", {3}, {-3, 0, 3});
++  test.AddOutput<int64_t>("C", {3}, {5, 10, 9});
+   test.Run();
+ }
+ 
+diff --git a/onnxruntime/test/providers/cpu/tensor/gather_op_test.cc b/onnxruntime/test/providers/cpu/tensor/gather_op_test.cc
+index 0f199d3fc9..e0a67c1b3e 100644
+--- a/onnxruntime/test/providers/cpu/tensor/gather_op_test.cc
++++ b/onnxruntime/test/providers/cpu/tensor/gather_op_test.cc
+@@ -36,6 +36,50 @@ TEST(GatherOpTest, Gather_axis0) {
+   run_test(true);
+ }
+ 
++TEST(GatherOpTest, Gather_axis0_mytest) {
++  // To test for NNAPI EP, we need the indices to be initializers
++  auto run_test = [](bool indices_is_initializer) {
++    OpTester test("Gather");
++    std::cout << "======GATHER TEST STARTS!======\n\n";
++    test.AddAttribute<int64_t>("axis", 0LL);
++    test.AddInput<float>("data", {18, 1},
++                         {0.0f, 0.1f, 0.2f, 0.3f,
++                          1.0f, 1.1f, 1.2f, 1.3f,
++                          2.0f, 2.1f, 2.2f, 2.3f,
++                          10.0f, 10.1f, 10.2f, 10.3f,
++                          11.0f, 11.1f});
++    test.AddInput<int64_t>("indices", {8, 2, 18}, {0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
++                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL},
++                          indices_is_initializer);
++    test.AddOutput<float>("output", {8, 2, 1}, {0.0, 0.1,
++                                                1.0, 1.1,
++                                                2.0, 2.1,
++                                                10.0, 10.1,
++                                                11.0, 11.1,
++                                                0.2, 0.3,
++                                                1.2, 1.3,
++                                                2.2, 2.3});
++    test.Run();
++  };
++
++  run_test(false);
++  // run_test(true);
++}
++
+ TEST(GatherOpTest, Gather_negative_axis) {
+   // To test for NNAPI EP, we need the indices to be initializers
+   auto run_test = [](bool indices_is_initializer) {
+diff --git a/onnxruntime/test/providers/cpu/tensor/isnan_test.cc b/onnxruntime/test/providers/cpu/tensor/isnan_test.cc
+index 53aeb0224b..8ad3722621 100644
+--- a/onnxruntime/test/providers/cpu/tensor/isnan_test.cc
++++ b/onnxruntime/test/providers/cpu/tensor/isnan_test.cc
+@@ -9,29 +9,47 @@
+ namespace onnxruntime {
+ namespace test {
+ 
+-TEST(IsNaNOpTest, IsNaNFloat) {
+-  OpTester test("IsNaN", 9, kOnnxDomain);
+-  std::vector<int64_t> dims{2, 2};
+-  test.AddInput<float>("X", dims, {1.0f, NAN, 2.0f, NAN});
+-  test.AddOutput<bool>("Y", dims, {false, true, false, true});
+-  test.Run();
+-}
++namespace {
++constexpr char kOpName[] = "IsNan";
++constexpr int kOpVersion = 9;
++
++template <typename TTarget, typename TNarrow = int8_t>
++void NonZeroBasicNumericTest() {
++  OpTester test{kOpName, kOpVersion};
+ 
+-TEST(IsNaNOpTest, IsNaNFloat16) {
+-  OpTester test("IsNaN", 9, kOnnxDomain);
+-  std::vector<int64_t> dims{2, 2};
+-  test.AddInput<MLFloat16>("X", dims, std::initializer_list<MLFloat16>({MLFloat16(math::floatToHalf(1.0f)), MLFloat16(math::floatToHalf(NAN)), MLFloat16(math::floatToHalf(2.0f)), MLFloat16(math::floatToHalf(NAN))}));
+-  test.AddOutput<bool>("Y", dims, {false, true, false, true});
++  std::vector<int64_t> X_dims{1, 2, 3};
++  std::vector<TNarrow> X{0, 1, 2,
++                         0, 3, 4};
++  test.AddInput<TTarget>("X", X_dims, std::vector<TTarget>{X.begin(), X.end()});
++  test.AddOutput<int64_t>(
++      "Y", {3, 4},
++      {0, 0, 0, 0,
++       0, 0, 1, 1,
++       1, 2, 1, 2});
+   test.Run();
+ }
++}  // namespace
+ 
+-TEST(IsNaNOpTest, IsNaNDouble) {
+-  OpTester test("IsNaN", 9, kOnnxDomain);
+-  std::vector<int64_t> dims{2, 2};
+-  test.AddInput<double>("X", dims, {1.0, NAN, 2.0, NAN});
+-  test.AddOutput<bool>("Y", dims, {false, true, false, true});
+-  test.Run();
++TEST(IsNanTest, BasicNumeric) {
++  NonZeroBasicNumericTest<int32_t>();
++  NonZeroBasicNumericTest<int64_t>();
++  NonZeroBasicNumericTest<float>();
+ }
++// TEST(IsNaNOpTest, IsNaNFloat16) {
++//   OpTester test("IsNaN", 9, kOnnxDomain);
++//   std::vector<int64_t> dims{2, 2};
++//   test.AddInput<MLFloat16>("X", dims, std::initializer_list<MLFloat16>({MLFloat16(math::floatToHalf(1.0f)), MLFloat16(math::floatToHalf(NAN)), MLFloat16(math::floatToHalf(2.0f)), MLFloat16(math::floatToHalf(NAN))}));
++//   test.AddOutput<bool>("Y", dims, {false, true, false, true});
++//   test.Run();
++// }
++
++// TEST(IsNaNOpTest, IsNaNDouble) {
++//   OpTester test("IsNaN", 9, kOnnxDomain);
++//   std::vector<int64_t> dims{2, 2};
++//   test.AddInput<double>("X", dims, {1.0, NAN, 2.0, NAN});
++//   test.AddOutput<bool>("Y", dims, {false, true, false, true});
++//   test.Run();
++// }
+ 
+ }  // namespace test
+ }  // namespace onnxruntime
+diff --git a/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc b/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc
+index fcc1ea7892..a6cd16e9b8 100644
+--- a/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc
++++ b/onnxruntime/test/testdata/custom_op_library/custom_op_library.cc
+@@ -9,6 +9,7 @@
+ #include <mutex>
+ 
+ #include "core/common/common.h"
++#include <iostream>
+ 
+ #ifdef USE_CUDA
+ #include <cuda_runtime.h>
+@@ -71,6 +72,110 @@ struct KernelTwo {
+   }
+ };
+ 
++struct KernelThree {
++
++  void Compute(OrtKernelContext* context) {
++    // Setup inputs
++    Ort::KernelContext ctx(context);
++    auto input_X = ctx.GetInput(0);
++    auto input_Y = ctx.GetInput(1);
++    const float* X = input_X.GetTensorData<float>();
++    const float* Y = input_Y.GetTensorData<float>();
++    std::cout << "INSIDE KERNEL THREE NATIVE OP\n";
++
++    // Setup output
++    auto dimensions = input_X.GetTensorTypeAndShapeInfo().GetShape();
++
++    auto output = ctx.GetOutput(0, dimensions);
++    auto output2 = ctx.GetOutput(1, dimensions);
++    float* out = output.GetTensorMutableData<float>();
++    float* out2 = output2.GetTensorMutableData<float>();
++
++    const size_t size = output.GetTensorTypeAndShapeInfo().GetElementCount();
++
++#ifdef USE_CUDA
++    cudaStream_t stream = reinterpret_cast<cudaStream_t>(ctx.GetGPUComputeStream());
++    cuda_add(size, out, X, Y, stream);
++#else
++    for (size_t i = 0; i < size; i++) {
++      out[i] = X[i] + Y[i];
++      out2[i] = X[i];
++    }
++#endif
++    }
++};
++
++struct CustomNativeKernel {
++  CustomNativeKernel(const OrtKernelInfo* info) {
++    Ort::ConstKernelInfo k_info{info};
++    info_copy_ = k_info.Copy();
++
++    // Create the addition operation
++    // const char* add_type_constraint_names[1] = {"T"};
++    // ONNXTensorElementDataType add_type_constraint_values[1] = {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT};
++
++    const char* gather_type_constraint_names[2] = {"T", "Tind"};
++    ONNXTensorElementDataType gather_type_constraint_values[2] = {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64};
++
++    constexpr int64_t axis_value = 0;
++    auto axis = Ort::OpAttr("axis", &axis_value, 1, OrtOpAttrType::ORT_OP_ATTR_INT);
++
++    Ort::OpAttr attr_list[1] = {std::move(axis)};
++
++    op_gather_ = Ort::Op::Create(info_copy_, "Gather", "", 13,
++                          gather_type_constraint_names,
++                          gather_type_constraint_values,
++                          2, attr_list, 1, 2, 1);
++
++    // // Save the OrtApi pointer
++    // api_ = api;
++  }
++
++  ~CustomNativeKernel() {}
++
++  void Compute(OrtKernelContext* context) {
++    auto mem_info = Ort::MemoryInfo::CreateCpu(OrtAllocatorType::OrtArenaAllocator, OrtMemType::OrtMemTypeCPU);
++    Ort::KernelContext ctx(context);
++    auto input_X = ctx.GetInput(0);
++    auto input_Y = ctx.GetInput(1);
++
++    auto dimensions = input_X.GetTensorTypeAndShapeInfo().GetShape();
++
++    auto output = ctx.GetOutput(0, dimensions);
++    auto output2 = ctx.GetOutput(1, dimensions);
++
++    sub_op_.Compute(context);
++
++
++    int64_t* outputData = output.GetTensorMutableData<int64_t>();
++    int64_t* outputData2 = output2.GetTensorMutableData<int64_t>();
++
++    std::cout << "OutputData: ";
++    for (size_t i = 0; i < dimensions.size(); ++i) {
++        std::cout << outputData[i] << " ";
++    }
++    std::cout << "\n";
++
++    std::cout << "OutputData2: ";
++    for (size_t i = 0; i < dimensions.size(); ++i) {
++        std::cout << outputData2[i] << " ";
++    }
++    std::cout << "\n";
++
++    // ========================================================
++
++    const OrtValue* add_inputs[2] = {output, input_Y};
++    OrtValue* add_outputs[1] = {output};
++
++    op_gather_.Invoke(context, add_inputs, 2, add_outputs, 1);
++  }
++
++ private:
++  Ort::KernelInfo info_copy_{nullptr};
++  Ort::Op op_gather_{nullptr};
++  KernelThree sub_op_;
++};
++
+ struct CustomOpOne : Ort::CustomOpBase<CustomOpOne, KernelOne> {
+   void* CreateKernel(const OrtApi& /* api */, const OrtKernelInfo* /* info */) const {
+     return std::make_unique<KernelOne>().release();
+@@ -105,6 +210,37 @@ struct CustomOpTwo : Ort::CustomOpBase<CustomOpTwo, KernelTwo> {
+ 
+ };
+ 
++struct CustomOpThree : Ort::CustomOpBase<CustomOpThree, KernelThree> {
++  void* CreateKernel(const OrtApi& /* api */, const OrtKernelInfo* /* info */) const {
++    return std::make_unique<KernelThree>().release();
++  };
++
++  const char* GetName() const { return "CustomOpThree"; };
++
++#ifdef USE_CUDA
++  const char* GetExecutionProviderType() const { return "CUDAExecutionProvider"; };
++#endif
++
++  size_t GetInputTypeCount() const { return 2; };
++  ONNXTensorElementDataType GetInputType(size_t /*index*/) const { return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT; };
++
++  size_t GetOutputTypeCount() const { return 2; };
++  ONNXTensorElementDataType GetOutputType(size_t /*index*/) const { return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT; };
++};
++
++struct CustomNativeOp : Ort::CustomOpBase<CustomNativeOp, CustomNativeKernel> {
++  void* CreateKernel(const OrtApi&, const OrtKernelInfo* info) const { return new CustomNativeKernel(info); };
++  const char* GetName() const { return "CustomNativeOp"; };
++
++  size_t GetInputTypeCount() const { return 2; };
++  ONNXTensorElementDataType GetInputType(size_t /*index*/) const {
++    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
++  };
++
++  size_t GetOutputTypeCount() const { return 1; };
++  ONNXTensorElementDataType GetOutputType(size_t /*index*/) const { return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT; };
++};
++
+ static void AddOrtCustomOpDomainToContainer(Ort::CustomOpDomain&& domain) {
+   static std::vector<Ort::CustomOpDomain> ort_custom_op_domain_container;
+   static std::mutex ort_custom_op_domain_mutex;
+@@ -117,13 +253,16 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
+ 
+   static const CustomOpOne c_CustomOpOne;
+   static const CustomOpTwo c_CustomOpTwo;
+-
++  static const CustomOpThree c_CustomOpThree;
++  static const CustomNativeOp c_CustomNativeOp;
+   OrtStatus* result = nullptr;
+ 
+   ORT_TRY {
+     Ort::CustomOpDomain domain{c_OpDomain};
+     domain.Add(&c_CustomOpOne);
+     domain.Add(&c_CustomOpTwo);
++    domain.Add(&c_CustomOpThree);
++    domain.Add(&c_CustomNativeOp);
+ 
+     Ort::UnownedSessionOptions session_options(options);
+     session_options.Add(domain);
+@@ -140,3 +279,7 @@ OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtA
+ OrtStatus* ORT_API_CALL RegisterCustomOpsAltName(OrtSessionOptions* options, const OrtApiBase* api) {
+   return RegisterCustomOps(options, api);
+ }
++
++
++// CustomNativeKernel::~CustomNativeKernel() {
++// }

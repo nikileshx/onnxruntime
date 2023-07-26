@@ -36,6 +36,50 @@ TEST(GatherOpTest, Gather_axis0) {
   run_test(true);
 }
 
+TEST(GatherOpTest, Gather_axis0_mytest) {
+  // To test for NNAPI EP, we need the indices to be initializers
+  auto run_test = [](bool indices_is_initializer) {
+    OpTester test("Gather");
+    std::cout << "======GATHER TEST STARTS!======\n\n";
+    test.AddAttribute<int64_t>("axis", 0LL);
+    test.AddInput<float>("data", {18, 1},
+                         {0.0f, 0.1f, 0.2f, 0.3f,
+                          1.0f, 1.1f, 1.2f, 1.3f,
+                          2.0f, 2.1f, 2.2f, 2.3f,
+                          10.0f, 10.1f, 10.2f, 10.3f,
+                          11.0f, 11.1f});
+    test.AddInput<int64_t>("indices", {8, 2, 18}, {0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL,
+                                                    0LL, 1LL, 2LL, 3LL, 4LL, 5LL, 6LL, 7LL, 8LL, 9LL, 10LL, 11LL, 12LL, 13LL, 14LL, 15LL, 16LL, 17LL},
+                          indices_is_initializer);
+    test.AddOutput<float>("output", {8, 2, 1}, {0.0, 0.1,
+                                                1.0, 1.1,
+                                                2.0, 2.1,
+                                                10.0, 10.1,
+                                                11.0, 11.1,
+                                                0.2, 0.3,
+                                                1.2, 1.3,
+                                                2.2, 2.3});
+    test.Run();
+  };
+
+  run_test(false);
+  // run_test(true);
+}
+
 TEST(GatherOpTest, Gather_negative_axis) {
   // To test for NNAPI EP, we need the indices to be initializers
   auto run_test = [](bool indices_is_initializer) {
